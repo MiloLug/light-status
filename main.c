@@ -106,6 +106,7 @@ main (int argc, const char *argv[])
                         "       actual name\n"
                         "       font family name - monospace, sans, etc.\n\n"
                     );
+                    exit(0);
                 }
                 break;
             // -T<x>
