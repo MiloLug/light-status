@@ -1,7 +1,7 @@
 # light-status
 ## Compilation Requirements
 ```
-make clang freetype2 libX11 libXft 
+make clang freetype2 libX11 libXft fontconfig 
 ```
 
 ## Compilation
@@ -12,23 +12,40 @@ sudo make install
 
 ## Help
 ```sh
-Usage: event-listener <event-source> <type> <code> <value> <command> [skip-count]
-Example: event-listener /dev/input/event0 4 4 85 "shutdown -P now"
+Usage: light-status [flags]
 
-Parameters:
-    <event-source> - string; event-source path
-    <type>         - int; '*' = any
-    <code>         - int; '*' = any
-    <value>        - int; '*' = any
-    <command>      - string; will be executed on match
-    [skip-count]   - int; 0 by default; how many times to skip the event
-        example: when it occurs two times and you want it to happen only once, just set skip-count to 1
+Flags:
+    --help              - display help
+    -i <data-command>   - data collection command
 
-The command's env variables:
-    E_TIME_SEC     - int; timestamp's seconds
-    E_TIME_USEC    - int; timestamp's remaining microseconds
-    E_TYPE         - int
-    E_CODE         - int
-    E_VALUE        - int
+        PANEL CONFIG
+    -w <width>          - panel width
+    -h <height>         - panel height
+    -[l,r,t,b] <value>  - panel left, right, top and bottom alignment
+    -c <color>          - panel color
+
+        TEXT CONFIG
+    -T[l,r,t,b] <value> - text left, right, top and bottom alignment
+    -Tf <font>          - font pattern
+    -Tc <color>         - text color
+
+<data-command> is a command that will be executed with popen() to show its output.
+    The command should periodically return a value, for example:
+        "while true; do echo `date`; sleep 1; done"
+    or
+        "slstatus -s"
+
+Alignment <value> can be:
+    C - center
+    U - unset
+    <number> - offset in pixels
+
+<color> should be in hex format with leading # (#000fff)
+
+<font> should be in pattern: <font-name>[:size=<font-size>]
+    <font-name> can be:
+       actual name
+       font family name - monospace, sans, etc.
+
 ```
 
