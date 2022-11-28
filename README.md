@@ -1,4 +1,10 @@
 # light-status
+
+A small utility that allows you to create basic floating windows to output any one-line text in them.
+
+It can be used to create some system UI, based on scripts and outputs of other programs (slstatus etc.):
+[![HKrurAP.md.png](https://iili.io/HKrurAP.md.png)](https://freeimage.host/i/HKrurAP)
+
 ## Compilation Requirements
 ```
 make clang freetype2 libX11 libXft fontconfig 
