@@ -15,6 +15,7 @@
 #define ALIGN_UNSET INT_MIN
 #define ALIGN_CENTER INT_MIN + 1
 
+
 typedef struct Alignment {
     int top;
     int bottom;
@@ -121,6 +122,47 @@ get_screen_rect(Display *dpy, int screen)
     }
 
     return rect;
+}
+
+
+int
+normalize_u8_string(signed char *str, size_t len)
+{
+    int i = 0;
+    
+    while (str[i] > 0) {
+ascii:
+        if (str[i] == '\n') {
+            if (i == len - 1) {
+                str[i] = '\0';
+                len--;
+                return len;
+            }else {
+                str[i] = ' ';
+            }
+        }
+		i++;
+	}
+
+	while (str[i]) {
+		if (str[i] > 0) {
+			goto ascii;
+		} else {
+			switch (0xF0 & str[i]) {
+			case 0xE0:
+				i += 3;
+				break;
+			case 0xF0:
+				i += 4;
+				break;
+			default:
+				i += 2;
+				break;
+			}
+		}
+	}
+	
+	return len;
 }
 
 
@@ -233,7 +275,6 @@ main (int argc, const char *argv[])
     Rect screen_rect = get_screen_rect(dpy, screen);
     Rect text_rect;
     char status[max_status_len];
-    size_t status_len;
 
     set_alignment(&panel_alignment, &panel_rect, &screen_rect);
     panel_rect.x += screen_rect.x;
@@ -264,19 +305,11 @@ main (int argc, const char *argv[])
 
     /* Read the output a line at a time - output it. */
     while (fgets(status, max_status_len, status_data_pipe) != NULL) {
-        status_len = strlen(status);
+        normalize_u8_string((signed char *)status, strlen(status));
         
-        if (status_len > 0 && status[status_len - 1] == '\n') {
-            status_len--;
-            status[status_len] = '\0';
-        }
-        for (int i = 0; i < status_len; i++) {
-            if (status[i] == '\n') {
-                status[i] = ' ';
-            }
-        }
-
-        drw_font_getexts(drw->fonts, status, status_len, &text_rect.w, &text_rect.h);
+        text_rect.w = 0;
+        text_rect.h = 0;
+        get_text_rect(drw, status, &text_rect);
         set_alignment(&text_alignment, &text_rect, &panel_rect);
         
         XClearWindow(dpy, window);
