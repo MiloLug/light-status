@@ -1,46 +1,60 @@
-# light-status - linux event listener
+# light-status - percentage configuration utility
 # See LICENSE file for copyright and license details.
 
 include config.mk
 
-SRC = main.c util.c drw.c
-OBJ = ${SRC:.c=.o}
-BIN_NAME = light-status
+MODE ?= release
+OUT_DIR = out/${MODE}
+DIST_DIR = dist
 
-all: options ${BIN_NAME}
+SRC = main.c drw.c util.c
+HEADERS = util.h drw.h config.h
+OBJ = $(addprefix ${OUT_DIR}/,${SRC:.c=.o})
+DIST_ASSETS = LICENSE Makefile README.md config.mk ${HEADERS} ${SRC}
+
+ifeq (${MODE}, release)
+	CFLAGS += ${RELEASE_CFLAGS}
+endif
+
+all: options build
 
 options:
-	@echo crealtime build options:
-	@echo "CFLAGS   = ${CFLAGS}"
+	@echo ${BIN_NAME} build options \(${MODE}\):
+	@echo ""
+	@echo "CFLAGS   = ${CFLAGS} ${DEFFLAGS}"
 	@echo "LDFLAGS  = ${LDFLAGS}"
 	@echo "CC       = ${CC}"
+	@echo ""
 
-.c.o:
-	${CC} -c ${CFLAGS} $<
+${OUT_DIR}:
+	mkdir -p $@
 
-${OBJ}: config.h config.mk
+${OUT_DIR}/%.o: %.c ${HEADERS} config.mk | ${OUT_DIR}
+	${CC} -c ${CFLAGS} ${DEFFLAGS} $< -o $@
 
-${BIN_NAME}: ${OBJ}
+${OUT_DIR}/${BIN_NAME}: ${OBJ}
 	${CC} -o $@ ${OBJ} ${LDFLAGS}
 
-clean:
-	rm -f ${BIN_NAME} ${OBJ} ${BIN_NAME}-${VERSION}.tar.gz
+build: | ${OUT_DIR}/${BIN_NAME}
 
-dist: clean
-	mkdir -p ${BIN_NAME}-${VERSION}
-	cp -R LICENSE Makefile README config.mk\
-		drw.h util.h ${SRC} ${BIN_NAME}-${VERSION}
-	tar -cf ${BIN_NAME}-${VERSION}.tar ${BIN_NAME}-${VERSION}
-	gzip ${BIN_NAME}-${VERSION}.tar
-	rm -rf ${BIN_NAME}-${VERSION}
+clean:
+	rm -rf ${OUT_DIR}
+	rm -rf ${DIST_DIR}
+
+dist:
+	mkdir -p ${DIST_DIR}/${BIN_NAME}-${VERSION}
+	cp -r ${DIST_ASSETS} ${DIST_DIR}/${BIN_NAME}-${VERSION}
+	cd ${DIST_DIR}; \
+		tar -cf ${BIN_NAME}-${VERSION}.tar ${BIN_NAME}-${VERSION}; \
+		gzip ${BIN_NAME}-${VERSION}.tar; \
+		rm -rf ${BIN_NAME}-${VERSION}
 
 install: all
 	mkdir -p ${DESTDIR}${PREFIX}/bin
-	cp -f ${BIN_NAME} ${DESTDIR}${PREFIX}/bin
+	cp -f ${OUT_DIR}/${BIN_NAME} ${DESTDIR}${PREFIX}/bin
 	chmod 755 ${DESTDIR}${PREFIX}/bin/${BIN_NAME}
 
 uninstall:
 	rm -f ${DESTDIR}${PREFIX}/bin/${BIN_NAME}
 
-.PHONY: all options clean dist install uninstall
-
+.PHONY: all options clean build dist install uninstall

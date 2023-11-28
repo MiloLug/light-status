@@ -1,6 +1,9 @@
 #include <stdbool.h>
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
+#ifdef USE_XINERAMA
+    #include <X11/extensions/Xinerama.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -29,37 +32,101 @@ typedef struct Alignment {
 
 
 void
-calc_alignment_xy(const Alignment *alignment, int obj_w, int obj_h, int container_w, int container_h, int *x, int *y)
+set_alignment(const Alignment *alignment, Rect * obj, Rect * container)
 {
-    *y = alignment->top == ALIGN_CENTER || alignment->bottom == ALIGN_CENTER
-        ? (container_h - obj_h) / 2
+    obj->y = alignment->top == ALIGN_CENTER || alignment->bottom == ALIGN_CENTER
+        ? (container->h - obj->h) / 2
         : alignment->top != ALIGN_UNSET
             ? alignment->top
             : alignment->bottom != ALIGN_UNSET
-                ? container_h - obj_h - alignment->bottom
+                ? container->h - obj->h - alignment->bottom
                 : 0;
 
-    *x = alignment->left == ALIGN_CENTER || alignment->right == ALIGN_CENTER
-        ? (container_w - obj_w) / 2
+    obj->x = alignment->left == ALIGN_CENTER || alignment->right == ALIGN_CENTER
+        ? (container->w - obj->w) / 2
         : alignment->left != ALIGN_UNSET
             ? alignment->left
             : alignment->right != ALIGN_UNSET
-                ? container_w - obj_w - alignment->right
+                ? container->w - obj->w - alignment->right
                 : 0;
 }
 
 
 #include "config.h"
 
+
+void
+print_help(void)
+{
+    printf(
+        "Usage: light-status [flags]\n\n"
+        "Flags:\n"
+        "    --help              - display help\n"
+        "    -i <data-command>   - data collection command\n\n"
+        "        PANEL CONFIG\n"
+        "    -w <width>          - panel width\n"
+        "    -h <height>         - panel height\n"
+        "    -[l,r,t,b] <value>  - panel left, right, top and bottom alignment\n"
+        "    -c <color>          - panel color\n\n"
+        "        TEXT CONFIG\n"
+        "    -T[l,r,t,b] <value> - text left, right, top and bottom alignment\n"
+        "    -Tf <font>          - font pattern\n"
+        "    -Tc <color>         - text color\n\n"
+        "<data-command> is a command that will be executed with popen() to show its output.\n"
+        "    The command should periodically return a value, for example:\n"
+        "        \"while true; do echo `date`; sleep 1; done\"\n"
+        "    or\n"
+        "        \"slstatus -s\"\n\n"
+        "Alignment <value> can be:\n"
+        "    C - center\n"
+        "    U - unset (default)\n"
+        "    <number> - offset in pixels\n\n"
+        "<color> should be in hex format with leading # (#000fff)\n\n"
+        "<font> should be in pattern: <font-name>[:size=<font-size>]\n"
+        "    <font-name> can be:\n"
+        "       actual name\n"
+        "       font family name - monospace, sans, etc.\n\n"
+    );
+}
+
+
+Rect
+get_screen_rect(Display *dpy, int screen)
+{
+    Rect rect;
+    bool xineramaIsOk = false;
+#ifdef USE_XINERAMA
+    int _dummy1, _dummy2;
+    if (XineramaQueryExtension(dpy, &_dummy1, &_dummy2)) {
+        if (XineramaIsActive(dpy)) {
+            int heads=0;
+            XineramaScreenInfo * screens = XineramaQueryScreens(dpy, &heads);
+            if (heads>0) {
+                rect.w = screens[screen].width;
+                rect.h = screens[screen].height;
+                rect.x = screens[screen].x_org;
+                rect.y = screens[screen].y_org;
+
+                xineramaIsOk=true;
+            } else printf("XineramaQueryScreens says there aren't any");
+            XFree(screens);
+        } else printf("Xinerama not active");
+    } else printf("Xinerama not supported\n");
+#endif
+    if (!xineramaIsOk) {
+        rect.w = DisplayWidth(dpy, screen);
+        rect.h = DisplayHeight(dpy, screen);
+        rect.x = 0;
+        rect.y = 0;
+    }
+
+    return rect;
+}
+
+
 int
 main (int argc, const char *argv[])
 {
-    Display *dpy = XOpenDisplay(NULL);
-    if (!dpy) {
-        fprintf(stderr, "Could not open display.\n");
-        exit(EXIT_FAILURE);
-    }
-
     const char **fonts = default_fonts;
     int fonts_len = sizeof(default_fonts) / sizeof(char*);
     const char *status_collecting_command = default_status_collecting_command;
@@ -77,35 +144,7 @@ main (int argc, const char *argv[])
             // --<x>
             case '-':
                 if (strcmp(cur_arg+2, "help") == 0) {
-                    printf(
-                        "Usage: light-status [flags]\n\n"
-                        "Flags:\n"
-                        "    --help              - display help\n"
-                        "    -i <data-command>   - data collection command\n\n"
-                        "        PANEL CONFIG\n"
-                        "    -w <width>          - panel width\n"
-                        "    -h <height>         - panel height\n"
-                        "    -[l,r,t,b] <value>  - panel left, right, top and bottom alignment\n"
-                        "    -c <color>          - panel color\n\n"
-                        "        TEXT CONFIG\n"
-                        "    -T[l,r,t,b] <value> - text left, right, top and bottom alignment\n"
-                        "    -Tf <font>          - font pattern\n"
-                        "    -Tc <color>         - text color\n\n"
-                        "<data-command> is a command that will be executed with popen() to show its output.\n"
-                        "    The command should periodically return a value, for example:\n"
-                        "        \"while true; do echo `date`; sleep 1; done\"\n"
-                        "    or\n"
-                        "        \"slstatus -s\"\n\n"
-                        "Alignment <value> can be:\n"
-                        "    C - center\n"
-                        "    U - unset\n"
-                        "    <number> - offset in pixels\n\n"
-                        "<color> should be in hex format with leading # (#000fff)\n\n"
-                        "<font> should be in pattern: <font-name>[:size=<font-size>]\n"
-                        "    <font-name> can be:\n"
-                        "       actual name\n"
-                        "       font family name - monospace, sans, etc.\n\n"
-                    );
+                    print_help();
                     exit(0);
                 }
                 break;
@@ -157,11 +196,11 @@ main (int argc, const char *argv[])
                 break;
             case 'w':
                 cur_arg = argv[++i];
-                panel_width = atoi(cur_arg);
+                panel_rect.w = atoi(cur_arg);
                 break;
             case 'h':
                 cur_arg = argv[++i];
-                panel_height = atoi(cur_arg);
+                panel_rect.h = atoi(cur_arg);
                 break;
             case 'c':
                 cur_arg = argv[++i];
@@ -174,25 +213,41 @@ main (int argc, const char *argv[])
     }
 #endif
 
+    FILE *status_data_pipe = popen(status_collecting_command, "r");
+    if (status_data_pipe == NULL) {
+        printf("Failed to run the command\n");
+        return 1;
+    }
+
+    Display *dpy = XOpenDisplay(NULL);
+    if (!dpy) {
+        fprintf(stderr, "Could not open display.\n");
+        return 1;
+    }
+
     int screen = DefaultScreen(dpy);
     Visual *visual = DefaultVisual(dpy, screen);
     int depth  = DefaultDepth(dpy, screen);
     Window root_window = DefaultRootWindow(dpy);
 
-    int dpy_width = DisplayWidth(dpy, screen);
-    int dpy_height = DisplayHeight(dpy, screen);
-    int panel_x, panel_y;
-    calc_alignment_xy(&panel_alignment, panel_width, panel_height, dpy_width, dpy_height, &panel_x, &panel_y);
+    Rect screen_rect = get_screen_rect(dpy, screen);
+    Rect text_rect;
+    char status[max_status_len];
+    size_t status_len;
 
+    set_alignment(&panel_alignment, &panel_rect, &screen_rect);
+    panel_rect.x += screen_rect.x;
+    panel_rect.y += screen_rect.y;
+
+    /* Create a simple window with a drawable. */
     XSetWindowAttributes window_attributes = {
         .override_redirect = True,
     };
-
     Window window = XCreateWindow(
         dpy,
         root_window,  // parent
-        panel_x, panel_y,  // x, y
-        panel_width, panel_height,  // width, height
+        panel_rect.x, panel_rect.y,
+        panel_rect.w, panel_rect.h,
         0,  // border width
         depth,  // depth
         InputOutput,  // class
@@ -202,29 +257,16 @@ main (int argc, const char *argv[])
     );
     XMapWindow(dpy, window);
 
-    Drw *drw = drw_create(dpy, screen, root_window, panel_width, panel_height);
+    Drw *drw = drw_create(dpy, screen, root_window, panel_rect.w, panel_rect.h);
     drw_fontset_create(drw, fonts, fonts_len);
     Clr *scheme = drw_scm_create(drw, color_scheme, sizeof(color_scheme) / sizeof(char*));
-    drw_setscheme(drw, scheme);
-    
-    FILE *slstatus_pipe;
-    char status[max_status_len];
-    size_t status_len;
-    unsigned int status_row_h, status_row_w;
-    int status_row_x, status_row_y;
-
-    /* Open the command for reading. */
-    slstatus_pipe = popen(status_collecting_command, "r");
-    if (slstatus_pipe == NULL) {
-        printf("Failed to run command\n");
-        return 1;
-    }
+    drw_set_scheme(drw, scheme);
 
     /* Read the output a line at a time - output it. */
-    while (fgets(status, max_status_len, slstatus_pipe) != NULL) {
+    while (fgets(status, max_status_len, status_data_pipe) != NULL) {
         status_len = strlen(status);
-        drw_font_getexts(drw->fonts, status, status_len, &status_row_w, &status_row_h);
-        calc_alignment_xy(&text_alignment, status_row_w, status_row_h, panel_width, panel_height, &status_row_x, &status_row_y);
+        drw_font_getexts(drw->fonts, status, status_len, &text_rect.w, &text_rect.h);
+        set_alignment(&text_alignment, &text_rect, &panel_rect);
 
         for (int i = 0; i < status_len; i++) {
             if (status[i] == '\n') {
@@ -233,22 +275,22 @@ main (int argc, const char *argv[])
         }
         
         XClearWindow(dpy, window);
-        drw_rect(drw, 0, 0, panel_width, panel_height, true, true);
+        drw_rect(drw, 0, 0, panel_rect.w, panel_rect.h, true, true);
         drw_text(
             drw,
-            status_row_x, status_row_y,  // x, y
-            status_row_w, status_row_h,  // width, height
+            text_rect.x, text_rect.y,
+            text_rect.w, text_rect.h,
             0,  // align
             status,
             false  // invert color
         );
-        drw_map(drw, window, 0, 0, panel_width, panel_height);
+        drw_map(drw, window, 0, 0, panel_rect.w, panel_rect.h);
         
         XFlush(dpy);
     }
 
-    pclose(slstatus_pipe);
- 
+    pclose(status_data_pipe);
+
     drw_free(drw);
     free(scheme);
 

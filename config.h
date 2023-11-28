@@ -4,9 +4,14 @@
 #define USE_ARGS
 
 uint32_t
-    panel_width = 1000,
-    panel_height = 70,
     max_status_len = 2048;
+
+Rect panel_rect = {
+    .x = 0,
+    .y = 0,
+    .w = 1000,
+    .h = 70,
+};
 
 // Alignment.[top, bottom, left, right]: int | ALIGN_CENTER | ALIGN_UNSET 
 Alignment panel_alignment = {
@@ -29,4 +34,3 @@ const char default_background_color[] = "#000000";
 
 // should repeatedly put a string witn \n at the end
 const char default_status_collecting_command[] = "/usr/local/bin/slstatus -s";
-

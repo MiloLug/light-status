@@ -230,7 +230,7 @@ drw_setfontset(Drw *drw, Fnt *set)
 }
 
 void
-drw_setscheme(Drw *drw, Clr *scm)
+drw_set_scheme(Drw *drw, Clr *scm)
 {
 	if (drw)
 		drw->scheme = scm;

@@ -7,7 +7,7 @@ It can be used to create some system UI, based on scripts and outputs of other p
 
 ## Compilation Requirements
 ```
-make clang freetype2 libX11 libXft fontconfig 
+make clang freetype2 libX11 libXft fontconfig libXinerama
 ```
 
 ## Compilation
@@ -43,7 +43,7 @@ Flags:
 
 Alignment <value> can be:
     C - center
-    U - unset
+    U - unset (default)
     <number> - offset in pixels
 
 <color> should be in hex format with leading # (#000fff)
@@ -54,4 +54,3 @@ Alignment <value> can be:
        font family name - monospace, sans, etc.
 
 ```
-

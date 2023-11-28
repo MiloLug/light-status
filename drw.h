@@ -1,8 +1,13 @@
 /* See LICENSE file for copyright and license details. */
 
-typedef struct {
+typedef struct Cur {
 	Cursor cursor;
 } Cur;
+
+typedef struct Rect {
+	unsigned int w, h;
+	int x, y;
+} Rect;
 
 typedef struct Fnt {
 	Display *dpy;
@@ -47,7 +52,7 @@ void drw_cur_free(Drw *drw, Cur *cursor);
 
 /* Drawing context manipulation */
 void drw_setfontset(Drw *drw, Fnt *set);
-void drw_setscheme(Drw *drw, Clr *scm);
+void drw_set_scheme(Drw *drw, Clr *scm);
 
 /* Drawing functions */
 void drw_rect(Drw *drw, int x, int y, unsigned int w, unsigned int h, int filled, int invert);
