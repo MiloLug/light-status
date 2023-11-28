@@ -265,14 +265,19 @@ main (int argc, const char *argv[])
     /* Read the output a line at a time - output it. */
     while (fgets(status, max_status_len, status_data_pipe) != NULL) {
         status_len = strlen(status);
-        drw_font_getexts(drw->fonts, status, status_len, &text_rect.w, &text_rect.h);
-        set_alignment(&text_alignment, &text_rect, &panel_rect);
-
+        
+        if (status_len > 0 && status[status_len - 1] == '\n') {
+            status_len--;
+            status[status_len] = '\0';
+        }
         for (int i = 0; i < status_len; i++) {
             if (status[i] == '\n') {
                 status[i] = ' ';
             }
         }
+
+        drw_font_getexts(drw->fonts, status, status_len, &text_rect.w, &text_rect.h);
+        set_alignment(&text_alignment, &text_rect, &panel_rect);
         
         XClearWindow(dpy, window);
         drw_rect(drw, 0, 0, panel_rect.w, panel_rect.h, true, true);
