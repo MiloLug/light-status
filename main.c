@@ -12,7 +12,6 @@
 
 #include "drw.h"
 
-
 #define ALIGN_UNSET INT_MIN
 #define ALIGN_CENTER INT_MIN + 1
 
@@ -60,48 +59,19 @@ static volatile FILE *status_data_pipe = NULL;
 
 
 static void
-sig_handler(int sig)
+on_close(void)
 {
     if (status_data_pipe != NULL) {
         pclose((FILE *)status_data_pipe);
         status_data_pipe = NULL;
     }
-    exit(0);
 }
 
-
-void
-print_help(void)
+static void
+sig_handler(int sig)
 {
-    printf(
-        "Usage: light-status [flags]\n\n"
-        "Flags:\n"
-        "    --help              - display help\n"
-        "    -i <data-command>   - data collection command\n\n"
-        "        PANEL CONFIG\n"
-        "    -w <width>          - panel width\n"
-        "    -h <height>         - panel height\n"
-        "    -[l,r,t,b] <value>  - panel left, right, top and bottom alignment\n"
-        "    -c <color>          - panel color\n\n"
-        "        TEXT CONFIG\n"
-        "    -T[l,r,t,b] <value> - text left, right, top and bottom alignment\n"
-        "    -Tf <font>          - font pattern\n"
-        "    -Tc <color>         - text color\n\n"
-        "<data-command> is a command that will be executed with popen() to show its output.\n"
-        "    The command should periodically return a value, for example:\n"
-        "        \"while true; do echo `date`; sleep 1; done\"\n"
-        "    or\n"
-        "        \"slstatus -s\"\n\n"
-        "Alignment <value> can be:\n"
-        "    C - center\n"
-        "    U - unset (default)\n"
-        "    <number> - offset in pixels\n\n"
-        "<color> should be in hex format with leading # (#000fff)\n\n"
-        "<font> should be in pattern: <font-name>[:size=<font-size>]\n"
-        "    <font-name> can be:\n"
-        "       actual name\n"
-        "       font family name - monospace, sans, etc.\n\n"
-    );
+    on_close();
+    exit(0);
 }
 
 
@@ -180,11 +150,47 @@ ascii:
 }
 
 
+void
+print_help(void)
+{
+    printf(
+        "Usage: light-status [flags]\n\n"
+        "Flags:\n"
+        "    --help              - display help\n"
+        "    -i <data-command>   - data collection command\n\n"
+        "        PANEL CONFIG\n"
+        "    -w <width>          - panel width\n"
+        "    -h <height>         - panel height\n"
+        "    -[l,r,t,b] <value>  - panel left, right, top and bottom alignment\n"
+        "    -c <color>          - panel color\n\n"
+        "        TEXT CONFIG\n"
+        "    -T[l,r,t,b] <value> - text left, right, top and bottom alignment\n"
+        "    -Tf <font>          - font pattern\n"
+        "    -Tc <color>         - text color\n\n"
+        "<data-command> is a command that will be executed with popen() to show its output.\n"
+        "    The command should periodically return a value, for example:\n"
+        "        \"while true; do echo `date`; sleep 1; done\"\n"
+        "    or\n"
+        "        \"slstatus -s\"\n\n"
+        "Alignment <value> can be:\n"
+        "    C - center\n"
+        "    U - unset (default)\n"
+        "    <number> - offset in pixels\n\n"
+        "<color> should be in hex format with leading # (#000fff)\n\n"
+        "<font> should be in pattern: <font-name>[:size=<font-size>]\n"
+        "    <font-name> can be:\n"
+        "       actual name\n"
+        "       font family name - monospace, sans, etc.\n\n"
+    );
+}
+
+
 int
 main (int argc, const char *argv[])
 {
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
+    signal(SIGKILL, sig_handler);
 
     const char **fonts = default_fonts;
     int fonts_len = sizeof(default_fonts) / sizeof(char*);
@@ -344,13 +350,12 @@ main (int argc, const char *argv[])
         XFlush(dpy);
     }
 
-    pclose((FILE *)status_data_pipe);
-
     drw_free(drw);
     free(scheme);
 
     XDestroyWindow(dpy, window);
     XCloseDisplay(dpy);
 
+    on_close();
     return 0;
 }
