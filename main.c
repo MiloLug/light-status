@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <signal.h>
 
 #include "drw.h"
 
@@ -54,6 +55,19 @@ set_alignment(const Alignment *alignment, Rect * obj, Rect * container)
 
 
 #include "config.h"
+
+static volatile FILE *status_data_pipe = NULL;
+
+
+static void
+sig_handler(int sig)
+{
+    if (status_data_pipe != NULL) {
+        pclose((FILE *)status_data_pipe);
+        status_data_pipe = NULL;
+    }
+    exit(0);
+}
 
 
 void
@@ -169,6 +183,9 @@ ascii:
 int
 main (int argc, const char *argv[])
 {
+    signal(SIGINT, sig_handler);
+    signal(SIGTERM, sig_handler);
+
     const char **fonts = default_fonts;
     int fonts_len = sizeof(default_fonts) / sizeof(char*);
     const char *status_collecting_command = default_status_collecting_command;
@@ -255,7 +272,7 @@ main (int argc, const char *argv[])
     }
 #endif
 
-    FILE *status_data_pipe = popen(status_collecting_command, "r");
+    status_data_pipe = popen(status_collecting_command, "r");
     if (status_data_pipe == NULL) {
         printf("Failed to run the command\n");
         return 1;
@@ -304,7 +321,7 @@ main (int argc, const char *argv[])
     drw_set_scheme(drw, scheme);
 
     /* Read the output a line at a time - output it. */
-    while (fgets(status, max_status_len, status_data_pipe) != NULL) {
+    while (fgets(status, max_status_len, (FILE *)status_data_pipe) != NULL) {
         normalize_u8_string((signed char *)status, strlen(status));
         
         text_rect.w = 0;
@@ -327,7 +344,7 @@ main (int argc, const char *argv[])
         XFlush(dpy);
     }
 
-    pclose(status_data_pipe);
+    pclose((FILE *)status_data_pipe);
 
     drw_free(drw);
     free(scheme);
