@@ -22,10 +22,10 @@ Alignment panel_alignment = {
 };
 
 Alignment text_alignment = {
-    .top = ALIGN_UNSET,
-    .bottom = ALIGN_CENTER,
-    .left = ALIGN_UNSET,
-    .right = ALIGN_CENTER,
+    .top = ALIGN_CENTER,
+    .bottom = ALIGN_UNSET,
+    .left = ALIGN_CENTER,
+    .right = ALIGN_UNSET,
 };
 
 const char *default_fonts[] = {"monospace:size=20"};
