@@ -71,6 +71,7 @@ static void
 sig_handler(int sig)
 {
     on_close();
+    kill(0, 15);
     exit(0);
 }
 
