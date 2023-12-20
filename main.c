@@ -168,6 +168,9 @@ print_help(void)
         "    -T[l,r,t,b] <value> - text left, right, top and bottom alignment\n"
         "    -Tf <font>          - font pattern\n"
         "    -Tc <color>         - text color\n\n"
+        "        XORG PROPERTIES\n"
+        "    -Xn <name>          - window name\n"
+        "    -Xc <class>         - window class\n\n"
         "<data-command> is a command that will be executed with popen() to show its output.\n"
         "    The command should periodically return a value, for example:\n"
         "        \"while true; do echo `date`; sleep 1; done\"\n"
@@ -201,6 +204,8 @@ main (int argc, const char *argv[])
         default_text_color,
         default_background_color
     };
+    const char * window_name = default_window_name;
+    const char * window_class = default_window_class;
 
 #ifdef USE_ARGS
     for (int i = 1; i < argc; i++) {
@@ -240,6 +245,17 @@ main (int argc, const char *argv[])
                     case 'c':
                         cur_arg = argv[++i];
                         color_scheme[0] = cur_arg;
+                        break;
+                }
+                break;
+            // -X<x>
+            case 'X':
+                switch (cur_arg[2]) {
+                    case 'n':
+                        window_name = argv[++i];
+                        break;
+                    case 'c':
+                        window_class = argv[++i];
                         break;
                 }
                 break;
@@ -320,6 +336,16 @@ main (int argc, const char *argv[])
         CWOverrideRedirect,  // value mask
         &window_attributes
     );
+    
+    /* set the name and class hints for the window manager to use */
+    XStoreName(dpy, window, window_name);
+    XClassHint * class_hint = XAllocClassHint();
+    if (class_hint) {
+        class_hint->res_name = window_name;
+        class_hint->res_class = window_class;
+    }
+    XSetClassHint(dpy, window, class_hint);
+    
     XMapWindow(dpy, window);
 
     Drw *drw = drw_create(dpy, screen, root_window, panel_rect.w, panel_rect.h);
