@@ -35,6 +35,10 @@ Flags:
     -Tf <font>          - font pattern
     -Tc <color>         - text color
 
+        XORG PROPERTIES
+    -Xn <name>          - window name
+    -Xc <class>         - window class
+
 <data-command> is a command that will be executed with popen() to show its output.
     The command should periodically return a value, for example:
         "while true; do echo `date`; sleep 1; done"
