@@ -1,5 +1,7 @@
+#include <X11/X.h>
 #include <stdbool.h>
 #include <X11/Xlib.h>
+#include <X11/Xatom.h>
 #include <X11/Xft/Xft.h>
 #ifdef USE_XINERAMA
     #include <X11/extensions/Xinerama.h>
@@ -344,7 +346,15 @@ main (int argc, const char *argv[])
         class_hint->res_name = window_name;
         class_hint->res_class = window_class;
     }
+    Atom win_type_atom = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
+    Atom win_utility_atom = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_UTILITY", False);
     XSetClassHint(dpy, window, class_hint);
+    XChangeProperty(
+        dpy, window,
+        win_type_atom, XA_ATOM, 32,
+        PropModeReplace,
+        (unsigned char *)&win_utility_atom, 1
+    );
     
     XMapWindow(dpy, window);
 
