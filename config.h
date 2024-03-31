@@ -34,5 +34,8 @@ const char default_background_color[] = "#000000";
 
 // should repeatedly put a string witn \n at the end
 const char default_status_collecting_command[] = "/usr/local/bin/slstatus -s";
-const char default_window_name[] = "light-status";
-const char default_window_class[] = "light-status";
+char default_window_name[] = "light-status";
+char default_window_class[] = "light-status";
+
+int monitor = MONITOR_FOCUSED;
+

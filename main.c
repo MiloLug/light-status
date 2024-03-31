@@ -34,6 +34,15 @@ typedef struct Alignment {
     }
 
 
+#define MONITOR_FOCUSED -1
+
+#define MONITOR_ASSIGN_STR(monitor, str) \
+    switch (str[0]) { \
+        case 'F': monitor = MONITOR_FOCUSED; break; \
+        default: monitor = atoi(str); break; \
+    }
+
+
 void
 set_alignment(const Alignment *alignment, Rect * obj, Rect * container)
 {
@@ -79,31 +88,84 @@ sig_handler(int sig)
 
 
 Rect
-get_screen_rect(Display *dpy, int screen)
+get_screen_rect(Display *dpy, int default_screen, int preferred_screen)
 {
     Rect rect;
     bool xineramaIsOk = false;
+
 #ifdef USE_XINERAMA
     int _dummy1, _dummy2;
-    if (XineramaQueryExtension(dpy, &_dummy1, &_dummy2)) {
-        if (XineramaIsActive(dpy)) {
-            int heads=0;
-            XineramaScreenInfo * screens = XineramaQueryScreens(dpy, &heads);
-            if (heads>0) {
-                rect.w = screens[screen].width;
-                rect.h = screens[screen].height;
-                rect.x = screens[screen].x_org;
-                rect.y = screens[screen].y_org;
 
-                xineramaIsOk=true;
-            } else printf("XineramaQueryScreens says there aren't any");
-            XFree(screens);
-        } else printf("Xinerama not active");
-    } else printf("Xinerama not supported\n");
+    Window root_window = XDefaultRootWindow(dpy);
+    Window window_returned;
+    int mouse_x, mouse_y;
+    unsigned int mask_return;
+    int current_screen = default_screen;
+
+    XineramaScreenInfo * screens = NULL;
+    XineramaScreenInfo * screen = NULL;
+    int heads=0;
+
+    if (!XineramaQueryExtension(dpy, &_dummy1, &_dummy2)) {
+        printf("Xinerama not supported\n");
+        goto xinerama_end;
+    }
+    if (!XineramaIsActive(dpy)) {
+        printf("Xinerama not active\n");
+        goto xinerama_end;
+    }
+    
+    screens = XineramaQueryScreens(dpy, &heads);
+    if (!screens) {
+        printf("XineramaQueryScreens failed\n");
+        goto xinerama_end;
+    }
+    if (heads < 1) {
+        printf("No screens found\n");
+        goto xinerama_end;
+    }
+
+    if (preferred_screen >= 0 && preferred_screen < heads) {
+        current_screen = preferred_screen;
+    } else {
+        if (!XQueryPointer(
+            dpy, root_window, &window_returned,
+            &window_returned, &mouse_x, &mouse_y, &_dummy1, &_dummy2,
+            &mask_return
+        )) {
+            printf("XQueryPointer failed\n");
+            goto xinerama_end;
+        }
+
+        for (int i = 0; i < heads; i++) {
+            screen = screens + i;
+            if (
+                mouse_x >= screen->x_org && mouse_x < screen->x_org + screen->width &&
+                mouse_y >= screen->y_org && mouse_y < screen->y_org + screen->height
+            ) {
+                current_screen = i;
+                break;
+            }
+        }
+    }
+
+    screen = screens + current_screen;
+    rect.x = screen->x_org;
+    rect.y = screen->y_org;
+    rect.w = screen->width;
+    rect.h = screen->height;
+    xineramaIsOk = true;
+
+xinerama_end:
+    
+    if (screens) {
+        XFree(screens);
+    }
 #endif
+
     if (!xineramaIsOk) {
-        rect.w = DisplayWidth(dpy, screen);
-        rect.h = DisplayHeight(dpy, screen);
+        rect.w = DisplayWidth(dpy, default_screen);
+        rect.h = DisplayHeight(dpy, default_screen);
         rect.x = 0;
         rect.y = 0;
     }
@@ -164,7 +226,7 @@ print_help(void)
         "        PANEL CONFIG\n"
         "    -w <width>          - panel width\n"
         "    -h <height>         - panel height\n"
-        "    -[l,r,t,b] <value>  - panel left, right, top and bottom alignment\n"
+        "    -[l,r,t,b] <align>  - panel left, right, top and bottom alignment\n"
         "    -c <color>          - panel color\n\n"
         "        TEXT CONFIG\n"
         "    -T[l,r,t,b] <value> - text left, right, top and bottom alignment\n"
@@ -172,13 +234,14 @@ print_help(void)
         "    -Tc <color>         - text color\n\n"
         "        XORG PROPERTIES\n"
         "    -Xn <name>          - window name\n"
-        "    -Xc <class>         - window class\n\n"
+        "    -Xc <class>         - window class\n"
+        "    -Xm <monitor>       - monitor number\n\n"
         "<data-command> is a command that will be executed with popen() to show its output.\n"
         "    The command should periodically return a value, for example:\n"
         "        \"while true; do echo `date`; sleep 1; done\"\n"
         "    or\n"
         "        \"slstatus -s\"\n\n"
-        "Alignment <value> can be:\n"
+        "<align> can be:\n"
         "    C - center\n"
         "    U - unset (default)\n"
         "    <number> - offset in pixels\n\n"
@@ -187,6 +250,10 @@ print_help(void)
         "    <font-name> can be:\n"
         "       actual name\n"
         "       font family name - monospace, sans, etc.\n\n"
+        "<monitor> can be:\n"
+        "    0 - primary monitor\n"
+        "    <number> - other monitors\n"
+        "    F - focused monitor\n\n"
     );
 }
 
@@ -206,8 +273,8 @@ main (int argc, const char *argv[])
         default_text_color,
         default_background_color
     };
-    const char * window_name = default_window_name;
-    const char * window_class = default_window_class;
+    char * window_name = default_window_name;
+    char * window_class = default_window_class;
 
 #ifdef USE_ARGS
     for (int i = 1; i < argc; i++) {
@@ -254,10 +321,14 @@ main (int argc, const char *argv[])
             case 'X':
                 switch (cur_arg[2]) {
                     case 'n':
-                        window_name = argv[++i];
+                        window_name = (char*)argv[++i];
                         break;
                     case 'c':
-                        window_class = argv[++i];
+                        window_class = (char*)argv[++i];
+                        break;
+                    case 'm':
+                        cur_arg = argv[++i];
+                        MONITOR_ASSIGN_STR(monitor, cur_arg);
                         break;
                 }
                 break;
@@ -314,7 +385,7 @@ main (int argc, const char *argv[])
     int depth  = DefaultDepth(dpy, screen);
     Window root_window = DefaultRootWindow(dpy);
 
-    Rect screen_rect = get_screen_rect(dpy, screen);
+    Rect screen_rect = get_screen_rect(dpy, screen, monitor);
     Rect text_rect;
     char status[max_status_len];
 
