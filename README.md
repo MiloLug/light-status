@@ -27,7 +27,7 @@ Flags:
         PANEL CONFIG
     -w <width>          - panel width
     -h <height>         - panel height
-    -[l,r,t,b] <value>  - panel left, right, top and bottom alignment
+    -[l,r,t,b] <align>  - panel left, right, top and bottom alignment
     -c <color>          - panel color
 
         TEXT CONFIG
@@ -38,6 +38,7 @@ Flags:
         XORG PROPERTIES
     -Xn <name>          - window name
     -Xc <class>         - window class
+    -Xm <monitor>       - monitor number
 
 <data-command> is a command that will be executed with popen() to show its output.
     The command should periodically return a value, for example:
@@ -45,7 +46,7 @@ Flags:
     or
         "slstatus -s"
 
-Alignment <value> can be:
+<align> can be:
     C - center
     U - unset (default)
     <number> - offset in pixels
@@ -56,5 +57,10 @@ Alignment <value> can be:
     <font-name> can be:
        actual name
        font family name - monospace, sans, etc.
+
+<monitor> can be:
+    0 - primary monitor
+    <number> - other monitors
+    F - focused monitor
 
 ```
