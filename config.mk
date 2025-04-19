@@ -16,7 +16,7 @@ RELEASE_CFLAGS = \
     -fno-finite-math-only \
     -march=native \
     -fno-exceptions \
-	-Ofast \
+	-O3 \
 	-fforce-emit-vtables \
 	-faddrsig
 

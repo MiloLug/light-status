@@ -43,6 +43,27 @@ typedef struct Alignment {
     }
 
 
+typedef struct Position {
+    int x;
+    int y;
+    int center;
+} Position;
+
+
+#define E_POSITION_PARSE_WRONG_FORMAT 1
+
+
+int
+parse_position(const char *str, Position *position)
+{
+    int result = sscanf(str, "%d:%d:%d", &position->x, &position->y, &position->center);
+    if (result != 3) {
+        return E_POSITION_PARSE_WRONG_FORMAT;
+    }
+    return 0;
+}
+
+
 void
 set_alignment(const Alignment *alignment, Rect * obj, Rect * container)
 {
@@ -61,6 +82,52 @@ set_alignment(const Alignment *alignment, Rect * obj, Rect * container)
             : alignment->right != ALIGN_UNSET
                 ? container->w - obj->w - alignment->right
                 : 0;
+}
+
+/**
+ * Increase the base rect's size to include the second rect.
+ * 
+ * @param base The base rect.
+ * @param rect The rect to add.
+ */
+void add_rect(Rect *base, Rect *rect)
+{
+    if (rect->x + rect->w > base->x + base->w) {
+        base->w = rect->x + rect->w - base->x;
+    }
+    if (rect->y + rect->h > base->y + base->h) {
+        base->h = rect->y + rect->h - base->y;
+    }
+    if (rect->x < base->x) {
+        base->x = rect->x;
+    }
+    if (rect->y < base->y) {
+        base->y = rect->y;
+    }
+}
+
+void position_to_00(Position *position, Rect *rect)
+{
+    switch (position->center) {
+        case -1:
+            break;
+        case 00:
+            position->x = rect->x + position->x;
+            position->y = rect->y + position->y;
+            break;
+        case 10:
+            position->x = rect->x + rect->w / 2 + position->x;
+            position->y = rect->y + position->y;
+            break;
+        case 01:
+            position->x = rect->x + position->x;
+            position->y = rect->y + rect->h / 2 - position->y;
+            break;
+        case 11:
+            position->x = rect->x + rect->w / 2 + position->x;
+            position->y = rect->y + rect->h / 2 - position->y;
+            break;
+    }
 }
 
 
@@ -88,7 +155,7 @@ sig_handler(int sig)
 
 
 Rect
-get_screen_rect(Display *dpy, int default_screen, int preferred_screen)
+get_screen_rect(Display *dpy, int default_screen, int preferred_screen, Position *mouse_position)
 {
     Rect rect;
     bool xineramaIsOk = false;
@@ -100,12 +167,12 @@ get_screen_rect(Display *dpy, int default_screen, int preferred_screen)
     Window window_returned;
     int mouse_x, mouse_y;
     unsigned int mask_return;
-    int current_screen = default_screen;
+    int current_screen_index = default_screen;
 
     XineramaScreenInfo * screens = NULL;
     XineramaScreenInfo * screen = NULL;
     int heads=0;
-
+    
     if (!XineramaQueryExtension(dpy, &_dummy1, &_dummy2)) {
         printf("Xinerama not supported\n");
         goto xinerama_end;
@@ -126,9 +193,30 @@ get_screen_rect(Display *dpy, int default_screen, int preferred_screen)
     }
 
     if (preferred_screen >= 0 && preferred_screen < heads) {
-        current_screen = preferred_screen;
+        current_screen_index = preferred_screen;
     } else {
-        if (!XQueryPointer(
+        Rect screen_space;
+        Rect current_screen;
+
+        for (int i = 0; i < heads; i++) {
+            screen = screens + i;
+            current_screen.x = screen->x_org;
+            current_screen.y = screen->y_org;
+            current_screen.w = screen->width;
+            current_screen.h = screen->height;
+
+            if (i == 0) {
+                screen_space = current_screen;
+            } else {
+                add_rect(&screen_space, &current_screen);
+            }
+        }
+
+        if (mouse_position) {
+            position_to_00(mouse_position, &screen_space);
+            mouse_x = mouse_position->x;
+            mouse_y = mouse_position->y;
+        } else if (!XQueryPointer(
             dpy, root_window, &window_returned,
             &window_returned, &mouse_x, &mouse_y, &_dummy1, &_dummy2,
             &mask_return
@@ -137,23 +225,27 @@ get_screen_rect(Display *dpy, int default_screen, int preferred_screen)
             goto xinerama_end;
         }
 
+        printf("Mouse position: %d %d\n", mouse_x, mouse_y);
+
         for (int i = 0; i < heads; i++) {
             screen = screens + i;
+            printf("Screen %d: %d %d %d %d\n", i, screen->x_org, screen->y_org, screen->width, screen->height);
             if (
                 mouse_x >= screen->x_org && mouse_x < screen->x_org + screen->width &&
                 mouse_y >= screen->y_org && mouse_y < screen->y_org + screen->height
             ) {
-                current_screen = i;
+                current_screen_index = i;
                 break;
             }
         }
     }
 
-    screen = screens + current_screen;
+    screen = screens + current_screen_index;
     rect.x = screen->x_org;
     rect.y = screen->y_org;
     rect.w = screen->width;
     rect.h = screen->height;
+
     xineramaIsOk = true;
 
 xinerama_end:
@@ -164,6 +256,7 @@ xinerama_end:
 #endif
 
     if (!xineramaIsOk) {
+        printf("Xinerama not active, using default screen\n");
         rect.w = DisplayWidth(dpy, default_screen);
         rect.h = DisplayHeight(dpy, default_screen);
         rect.x = 0;
@@ -233,9 +326,10 @@ print_help(void)
         "    -Tf <font>          - font pattern\n"
         "    -Tc <color>         - text color\n\n"
         "        XORG PROPERTIES\n"
-        "    -Xn <name>          - window name\n"
-        "    -Xc <class>         - window class\n"
-        "    -Xm <monitor>       - monitor number\n\n"
+        "    -Xn <name>             - window name\n"
+        "    -Xc <class>            - window class\n"
+        "    -Xm <monitor>          - monitor number\n"
+        "    -Xp <mouse x:mouse y>  - mouse position\n\n"
         "<data-command> is a command that will be executed with popen() to show its output.\n"
         "    The command should periodically return a value, for example:\n"
         "        \"while true; do echo `date`; sleep 1; done\"\n"
@@ -253,7 +347,33 @@ print_help(void)
         "<monitor> can be:\n"
         "    0 - primary monitor\n"
         "    <number> - other monitors\n"
-        "    F - focused monitor\n\n"
+        "    F - focused monitor, deduced from mouse position\n\n"
+        "<mouse x:mouse y:center> is the mouse position, for example: 100:200:00\n"
+        "    This is needed for Wayland, because it doesn't give the right mouse position\n"
+        "        in context of monitors.\n"
+        "    Center types:\n"
+        "        -1: absolute position\n"
+        "            Relative to the whole screen space:\n"
+        "        00: X---,---,\n"
+        "            |   |   |\n"
+        "            |---+---|\n"
+        "            |   |   |\n"
+        "            '---'---'\n"
+        "        10: ,---X---,\n"
+        "            |   |   |\n"
+        "            |---+---|\n"
+        "            |   |   |\n"
+        "            '---'---'\n"
+        "        01: ,---,---,\n"
+        "            |   |   |\n"
+        "            X---+---|\n"
+        "            |   |   |\n"
+        "            '---'---'\n"
+        "        11: ,---,---,\n"
+        "            |   |   |\n"
+        "            |---X---|\n"
+        "            |   |   |\n"
+        "            '---'---'\n\n"
     );
 }
 
@@ -275,6 +395,9 @@ main (int argc, const char *argv[])
     };
     char * window_name = default_window_name;
     char * window_class = default_window_class;
+
+    Position *current_mouse_position = NULL;
+    Position _mouse_position = {0, 0};
 
 #ifdef USE_ARGS
     for (int i = 1; i < argc; i++) {
@@ -329,6 +452,14 @@ main (int argc, const char *argv[])
                     case 'm':
                         cur_arg = argv[++i];
                         MONITOR_ASSIGN_STR(monitor, cur_arg);
+                        break;
+                    case 'p':
+                        cur_arg = argv[++i];
+                        if (parse_position(cur_arg, &_mouse_position) == E_POSITION_PARSE_WRONG_FORMAT) {
+                            printf("Wrong mouse position format, expected <x:y:center>\n");
+                            exit(1);
+                        }
+                        current_mouse_position = &_mouse_position;
                         break;
                 }
                 break;
@@ -385,7 +516,7 @@ main (int argc, const char *argv[])
     int depth  = DefaultDepth(dpy, screen);
     Window root_window = DefaultRootWindow(dpy);
 
-    Rect screen_rect = get_screen_rect(dpy, screen, monitor);
+    Rect screen_rect = get_screen_rect(dpy, screen, monitor, current_mouse_position);
     Rect text_rect;
     char status[max_status_len];
 
