@@ -25,7 +25,6 @@ typedef struct Position {
     int center;
 } Position;
 
-#define E_POSITION_PARSE_WRONG_FORMAT 1
 
 
 /**

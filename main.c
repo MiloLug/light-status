@@ -33,6 +33,66 @@
     }
 
 
+typedef struct MonitorSpec {
+    char *name;
+    int index;
+    Rect rect;
+    struct MonitorSpec *next;
+} MonitorSpec;
+
+
+#define E_MONITOR_SPEC_PARSE_WRONG_FORMAT -1
+
+int monitor_spec_from_str(const char *str, int str_len, MonitorSpec ** monitor_spec) {
+    int name_len = strcspn(str, ":");
+
+    if (name_len == 0 || name_len == str_len) {
+        return E_MONITOR_SPEC_PARSE_WRONG_FORMAT;
+    }
+
+    Rect rect;
+    int index;
+    if (sscanf(str + name_len + 1, "%d:%d:%d:%d:%d", &index, &rect.w, &rect.h, &rect.x, &rect.y) != 5) {
+        return E_MONITOR_SPEC_PARSE_WRONG_FORMAT;
+    }
+
+    MonitorSpec *spec = malloc(sizeof(MonitorSpec));
+    spec->name = malloc(name_len + 1);
+    memcpy(spec->name, str, name_len);
+    spec->name[name_len] = '\0';
+    spec->index = index;
+    spec->rect = rect;
+    spec->next = NULL;
+
+    *monitor_spec = spec;
+    return 0;
+}
+
+int parse_monitors(const char *str, MonitorSpec ** monitors) {
+    MonitorSpec ** head = monitors;
+
+    int i = 0;
+    while (true) {
+        int part_len = strcspn(str, ",");
+        if (part_len == 0)
+            break;
+        
+        if (monitor_spec_from_str(str, part_len, head) != 0)
+            return E_MONITOR_SPEC_PARSE_WRONG_FORMAT;
+        i++;
+        head = &(*head)->next;
+        
+        if (str[part_len] == ',')
+            str += part_len + 1;
+        else
+            break;
+    }
+
+    return i;
+}
+
+#define E_POSITION_PARSE_WRONG_FORMAT 1
+
 int
 parse_position(const char *str, Position *position)
 {
@@ -68,10 +128,29 @@ sig_handler(int sig)
 
 
 Rect
-get_screen_rect(Display *dpy, int default_screen, int preferred_screen, Position *mouse_position)
+get_screen_rect(Display *dpy, int default_screen, int preferred_screen, MonitorSpec *monitors)
 {
     Rect rect;
     bool xineramaIsOk = false;
+
+    if (monitors) {
+        rect = monitors->rect;
+
+        MonitorSpec *current = monitors;
+        if (preferred_screen >= 0) {
+            default_screen = preferred_screen;
+        }
+
+        while (current) {
+            if (current->index == default_screen) {
+                rect = current->rect;
+                break;
+            }
+            current = current->next;
+        }
+
+        return rect;
+    }
 
 #ifdef USE_XINERAMA
     int _dummy1, _dummy2;
@@ -125,11 +204,7 @@ get_screen_rect(Display *dpy, int default_screen, int preferred_screen, Position
             }
         }
 
-        if (mouse_position) {
-            position_to_00(mouse_position, &screen_space);
-            mouse_x = mouse_position->x;
-            mouse_y = mouse_position->y;
-        } else if (!XQueryPointer(
+        if (!XQueryPointer(
             dpy, root_window, &window_returned,
             &window_returned, &mouse_x, &mouse_y, &_dummy1, &_dummy2,
             &mask_return
@@ -238,8 +313,8 @@ print_help(void)
         "        XORG PROPERTIES\n"
         "    -Xn <name>             - window name\n"
         "    -Xc <class>            - window class\n"
-        "    -Xm <monitor>          - monitor number\n"
-        "    -Xp <mouse x:mouse y>  - mouse position\n\n"
+        "    -Xm <monitor index>    - monitor number\n"
+        "    -Xd <monitor spec>[,<monitor spec>...] - monitor spec\n"
         "<data-command> is a command that will be executed with popen() to show its output.\n"
         "    The command should periodically return a value, for example:\n"
         "        \"while true; do echo `date`; sleep 1; done\"\n"
@@ -254,36 +329,12 @@ print_help(void)
         "    <font-name> can be:\n"
         "       actual name\n"
         "       font family name - monospace, sans, etc.\n\n"
-        "<monitor> can be:\n"
+        "<monitor index> can be:\n"
         "    0 - primary monitor\n"
         "    <number> - other monitors\n"
         "    F - focused monitor, deduced from mouse position\n\n"
-        "<mouse x:mouse y:center> is the mouse position, for example: 100:200:00\n"
-        "    This is needed for Wayland, because it doesn't give the right mouse position\n"
-        "        in context of monitors.\n"
-        "    Center types:\n"
-        "        -1: absolute position\n"
-        "            Relative to the whole screen space:\n"
-        "        00: X---,---,\n"
-        "            |   |   |\n"
-        "            |---+---|\n"
-        "            |   |   |\n"
-        "            '---'---'\n"
-        "        10: ,---X---,\n"
-        "            |   |   |\n"
-        "            |---+---|\n"
-        "            |   |   |\n"
-        "            '---'---'\n"
-        "        01: ,---,---,\n"
-        "            |   |   |\n"
-        "            X---+---|\n"
-        "            |   |   |\n"
-        "            '---'---'\n"
-        "        11: ,---,---,\n"
-        "            |   |   |\n"
-        "            |---X---|\n"
-        "            |   |   |\n"
-        "            '---'---'\n\n"
+        "<monitor spec> is:\n"
+        "    <name>:<index>:<w>:<h>:<x>:<y> - monitor name, index, width, height, x, y\n\n"
     );
 }
 
@@ -306,8 +357,7 @@ main (int argc, const char *argv[])
     char * window_name = default_window_name;
     char * window_class = default_window_class;
 
-    Position *current_mouse_position = NULL;
-    Position _mouse_position = {0, 0};
+    MonitorSpec *monitors = NULL;
 
 #ifdef USE_ARGS
     for (int i = 1; i < argc; i++) {
@@ -363,13 +413,12 @@ main (int argc, const char *argv[])
                         cur_arg = argv[++i];
                         MONITOR_ASSIGN_STR(monitor, cur_arg);
                         break;
-                    case 'p':
+                    case 'd':
                         cur_arg = argv[++i];
-                        if (parse_position(cur_arg, &_mouse_position) == E_POSITION_PARSE_WRONG_FORMAT) {
-                            printf("Wrong mouse position format, expected <x:y:center>\n");
+                        if (parse_monitors(cur_arg, &monitors) == E_MONITOR_SPEC_PARSE_WRONG_FORMAT) {
+                            printf("Wrong monitor spec format, expected <name>:<index>:<w>:<h>:<x>:<y>\n");
                             exit(1);
                         }
-                        current_mouse_position = &_mouse_position;
                         break;
                 }
                 break;
@@ -426,7 +475,7 @@ main (int argc, const char *argv[])
     int depth  = DefaultDepth(dpy, screen);
     Window root_window = DefaultRootWindow(dpy);
 
-    Rect screen_rect = get_screen_rect(dpy, screen, monitor, current_mouse_position);
+    Rect screen_rect = get_screen_rect(dpy, screen, monitor, monitors);
     Rect text_rect;
     char status[max_status_len];
 
