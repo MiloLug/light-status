@@ -1,13 +1,10 @@
 /* See LICENSE file for copyright and license details. */
 
+#include "geometry.h"
+
 typedef struct Cur {
 	Cursor cursor;
 } Cur;
-
-typedef struct Rect {
-	unsigned int w, h;
-	int x, y;
-} Rect;
 
 typedef struct Fnt {
 	Display *dpy;

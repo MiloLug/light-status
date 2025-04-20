@@ -7,8 +7,8 @@ MODE ?= release
 OUT_DIR = out/${MODE}
 DIST_DIR = dist
 
-SRC = main.c drw.c util.c
-HEADERS = util.h drw.h config.h
+SRC = main.c drw.c util.c geometry.c
+HEADERS = util.h drw.h config.h geometry.h
 OBJ = $(addprefix ${OUT_DIR}/,${SRC:.c=.o})
 DIST_ASSETS = LICENSE Makefile README.md config.mk ${HEADERS} ${SRC}
 

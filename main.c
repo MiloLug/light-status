@@ -13,17 +13,7 @@
 #include <signal.h>
 
 #include "drw.h"
-
-#define ALIGN_UNSET INT_MIN
-#define ALIGN_CENTER INT_MIN + 1
-
-
-typedef struct Alignment {
-    int top;
-    int bottom;
-    int left;
-    int right;
-} Alignment;
+#include "geometry.h"
 
 
 #define ALIGNMENT_ASSIGN_STR(alignment, parameter, str) \
@@ -43,16 +33,6 @@ typedef struct Alignment {
     }
 
 
-typedef struct Position {
-    int x;
-    int y;
-    int center;
-} Position;
-
-
-#define E_POSITION_PARSE_WRONG_FORMAT 1
-
-
 int
 parse_position(const char *str, Position *position)
 {
@@ -61,73 +41,6 @@ parse_position(const char *str, Position *position)
         return E_POSITION_PARSE_WRONG_FORMAT;
     }
     return 0;
-}
-
-
-void
-set_alignment(const Alignment *alignment, Rect * obj, Rect * container)
-{
-    obj->y = alignment->top == ALIGN_CENTER || alignment->bottom == ALIGN_CENTER
-        ? (container->h - obj->h) / 2
-        : alignment->top != ALIGN_UNSET
-            ? alignment->top
-            : alignment->bottom != ALIGN_UNSET
-                ? container->h - obj->h - alignment->bottom
-                : 0;
-
-    obj->x = alignment->left == ALIGN_CENTER || alignment->right == ALIGN_CENTER
-        ? (container->w - obj->w) / 2
-        : alignment->left != ALIGN_UNSET
-            ? alignment->left
-            : alignment->right != ALIGN_UNSET
-                ? container->w - obj->w - alignment->right
-                : 0;
-}
-
-/**
- * Increase the base rect's size to include the second rect.
- * 
- * @param base The base rect.
- * @param rect The rect to add.
- */
-void add_rect(Rect *base, Rect *rect)
-{
-    if (rect->x + rect->w > base->x + base->w) {
-        base->w = rect->x + rect->w - base->x;
-    }
-    if (rect->y + rect->h > base->y + base->h) {
-        base->h = rect->y + rect->h - base->y;
-    }
-    if (rect->x < base->x) {
-        base->x = rect->x;
-    }
-    if (rect->y < base->y) {
-        base->y = rect->y;
-    }
-}
-
-void position_to_00(Position *position, Rect *rect)
-{
-    switch (position->center) {
-        case -1:
-            break;
-        case 00:
-            position->x = rect->x + position->x;
-            position->y = rect->y + position->y;
-            break;
-        case 10:
-            position->x = rect->x + rect->w / 2 + position->x;
-            position->y = rect->y + position->y;
-            break;
-        case 01:
-            position->x = rect->x + position->x;
-            position->y = rect->y + rect->h / 2 - position->y;
-            break;
-        case 11:
-            position->x = rect->x + rect->w / 2 + position->x;
-            position->y = rect->y + rect->h / 2 - position->y;
-            break;
-    }
 }
 
 
@@ -225,11 +138,8 @@ get_screen_rect(Display *dpy, int default_screen, int preferred_screen, Position
             goto xinerama_end;
         }
 
-        printf("Mouse position: %d %d\n", mouse_x, mouse_y);
-
         for (int i = 0; i < heads; i++) {
             screen = screens + i;
-            printf("Screen %d: %d %d %d %d\n", i, screen->x_org, screen->y_org, screen->width, screen->height);
             if (
                 mouse_x >= screen->x_org && mouse_x < screen->x_org + screen->width &&
                 mouse_y >= screen->y_org && mouse_y < screen->y_org + screen->height
