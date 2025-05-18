@@ -14,6 +14,7 @@
 
 #include "drw.h"
 #include "geometry.h"
+#include "util.h"
 
 
 #define ALIGNMENT_ASSIGN_STR(alignment, parameter, str) \
@@ -91,18 +92,6 @@ int parse_monitors(const char *str, MonitorSpec ** monitors) {
     return i;
 }
 
-#define E_POSITION_PARSE_WRONG_FORMAT 1
-
-int
-parse_position(const char *str, Position *position)
-{
-    int result = sscanf(str, "%d:%d:%d", &position->x, &position->y, &position->center);
-    if (result != 3) {
-        return E_POSITION_PARSE_WRONG_FORMAT;
-    }
-    return 0;
-}
-
 
 #include "config.h"
 
@@ -128,7 +117,7 @@ sig_handler(int sig)
 
 
 Rect
-get_screen_rect(Display *dpy, int default_screen, int preferred_screen, MonitorSpec *monitors)
+decide_screen_rect(Display *dpy, int default_screen, int preferred_screen, MonitorSpec *monitors)
 {
     Rect rect;
     bool xineramaIsOk = false;
@@ -136,17 +125,17 @@ get_screen_rect(Display *dpy, int default_screen, int preferred_screen, MonitorS
     if (monitors) {
         rect = monitors->rect;
 
-        MonitorSpec *current = monitors;
+        MonitorSpec *current_monitor = monitors;
         if (preferred_screen >= 0) {
             default_screen = preferred_screen;
         }
 
-        while (current) {
-            if (current->index == default_screen) {
-                rect = current->rect;
+        while (current_monitor) {
+            if (current_monitor->index == default_screen) {
+                rect = current_monitor->rect;
                 break;
             }
-            current = current->next;
+            current_monitor = current_monitor->next;
         }
 
         return rect;
@@ -241,7 +230,6 @@ xinerama_end:
 #endif
 
     if (!xineramaIsOk) {
-        printf("Xinerama not active, using default screen\n");
         rect.w = DisplayWidth(dpy, default_screen);
         rect.h = DisplayHeight(dpy, default_screen);
         rect.x = 0;
@@ -294,11 +282,12 @@ ascii:
 
 
 void
-print_help(void)
+print_help(const char *program_name)
 {
     printf(
-        "Usage: light-status [flags]\n\n"
-        "Flags:\n"
+        C_BLUE "Usage: " C_RESET "%s [flags]\n\n"
+        "Things marked !W or !X are only for Wayland or Xorg setups.\n\n"
+        C_GREEN "Flags:\n" C_RESET
         "    --help              - display help\n"
         "    -i <data-command>   - data collection command\n\n"
         "        PANEL CONFIG\n"
@@ -315,26 +304,27 @@ print_help(void)
         "    -Xc <class>            - window class\n"
         "    -Xm <monitor index>    - monitor number\n"
         "    -Xd <monitor spec>[,<monitor spec>...] - monitor spec\n"
-        "<data-command> is a command that will be executed with popen() to show its output.\n"
+        C_GREEN "<data-command>" C_RESET " is a command that will be executed with popen() to show its output.\n"
         "    The command should periodically return a value, for example:\n"
         "        \"while true; do echo `date`; sleep 1; done\"\n"
         "    or\n"
         "        \"slstatus -s\"\n\n"
-        "<align> can be:\n"
+        C_GREEN "<align>" C_RESET " can be:\n"
         "    C - center\n"
         "    U - unset (default)\n"
         "    <number> - offset in pixels\n\n"
-        "<color> should be in hex format with leading # (#000fff)\n\n"
-        "<font> should be in pattern: <font-name>[:size=<font-size>]\n"
-        "    <font-name> can be:\n"
+        C_GREEN "<color>" C_RESET " should be in hex format with leading # (#000fff)\n\n"
+        C_GREEN "<font>" C_RESET " should be in pattern: <font-name>[:size=<font-size>]\n"
+        "    " C_GREEN "<font-name>" C_RESET " can be:\n"
         "       actual name\n"
         "       font family name - monospace, sans, etc.\n\n"
-        "<monitor index> can be:\n"
+        C_GREEN "<monitor index>" C_RESET " can be:\n"
         "    0 - primary monitor\n"
         "    <number> - other monitors\n"
         "    F - focused monitor, deduced from mouse position\n\n"
-        "<monitor spec> is:\n"
-        "    <name>:<index>:<w>:<h>:<x>:<y> - monitor name, index, width, height, x, y\n\n"
+        C_GREEN "<monitor spec>" C_RESET " is:\n"
+        "    <name>:<index>:<w>:<h>:<x>:<y> - monitor name, index, width, height, x, y\n\n",
+        program_name
     );
 }
 
@@ -367,7 +357,7 @@ main (int argc, const char *argv[])
             // --<x>
             case '-':
                 if (strcmp(cur_arg+2, "help") == 0) {
-                    print_help();
+                    print_help(argv[0]);
                     exit(0);
                 }
                 break;
@@ -475,7 +465,7 @@ main (int argc, const char *argv[])
     int depth  = DefaultDepth(dpy, screen);
     Window root_window = DefaultRootWindow(dpy);
 
-    Rect screen_rect = get_screen_rect(dpy, screen, monitor, monitors);
+    Rect screen_rect = decide_screen_rect(dpy, screen, monitor, monitors);
     Rect text_rect;
     char status[max_status_len];
 
