@@ -3,7 +3,7 @@
 A small utility that allows you to create basic floating windows to output any one-line text in them.
 
 It can be used to create some system UI, based on scripts and outputs of other programs (slstatus etc.):
-[![HKrurAP.md.png](https://iili.io/HKrurAP.md.png)](https://freeimage.host/i/HKrurAP)
+[![3Pl1qrP.md.png](https://iili.io/3Pl1qrP.md.png)](https://freeimage.host/i/3Pl1qrP)
 
 ## Compilation Requirements
 ```
